@@ -71,14 +71,16 @@ jobs:
         if: inputs.terraform_command == 'validate'
         run: tflint --recursive
 
-      - name: Run Trivy
+      - name: Run Trivy vulnerability scanner in IaC mode
         if: inputs.terraform_command == 'validate'
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          scan-type: config
-          scan-ref: .
-          severity: HIGH,CRITICAL
-          exit-code: "1"
+          scan-type: 'config'
+          hide-progress: true
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
 
       - name: Terraform Plan
         if: inputs.terraform_command == 'plan'
