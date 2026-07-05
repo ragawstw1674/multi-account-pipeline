@@ -1,0 +1,103 @@
+name: Reusable Terraform
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: Project name (e.g. tms, api)
+        required: true
+        type: string
+
+      environment:
+        description: Environment name (e.g. dev, stage, prod)
+        required: true
+        type: string
+
+      terraform_command:
+        description: Terraform command to execute
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+
+    environment: ${{ format('{0}-{1}', inputs.project, inputs.environment) }}
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: stacks/${{ inputs.project }}/${{ inputs.environment }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ vars.TF_VERSION }}
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        if: inputs.terraform_command == 'validate'
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        if: inputs.terraform_command == 'validate'
+        run: terraform validate
+
+      - name: Initialize TFLint
+        if: inputs.terraform_command == 'validate'
+        run: tflint --init
+
+      - name: Run TFLint
+        if: inputs.terraform_command == 'validate'
+        run: tflint --recursive
+
+      - name: Run Trivy
+        if: inputs.terraform_command == 'validate'
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+      - name: Terraform Plan
+        if: inputs.terraform_command == 'plan'
+        run: terraform plan -out=tfplan
+
+      - name: Upload Plan
+        if: inputs.terraform_command == 'plan'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ inputs.project }}-${{ inputs.environment }}
+          path: stacks/${{ inputs.project }}/${{ inputs.environment }}/tfplan
+
+      - name: Download Plan
+        if: inputs.terraform_command == 'apply'
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ inputs.project }}-${{ inputs.environment }}
+          path: stacks/${{ inputs.project }}/${{ inputs.environment }}
+
+      - name: Terraform Apply
+        if: inputs.terraform_command == 'apply'
+        run: terraform apply -auto-approve tfplan

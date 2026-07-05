@@ -1,0 +1,28 @@
+name: Terraform Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        type: string
+        required: true
+
+      environment:
+        type: string
+        required: true
+
+jobs:
+  validate:
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      project: ${{ inputs.project }}
+      environment: ${{ inputs.environment }}
+      terraform_command: validate
+
+  apply:
+    needs: validate
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      project: ${{ inputs.project }}
+      environment: ${{ inputs.environment }}
+      terraform_command: apply
