@@ -1,0 +1,63 @@
+name: Terraform Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        type: choice
+        options: [tms, api]
+
+      environment:
+        type: choice
+        options: [dev, stage, prod]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+
+    outputs:
+      aws_region: ${{ steps.config.outputs.aws_region }}
+      role_arn: ${{ steps.config.outputs.role_arn }}
+      tf_version: ${{ steps.config.outputs.tf_version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read accounts.json
+        id: config
+        shell: bash
+        run: |
+          TF_VERSION=$(jq -r '.terraform.version' accounts.json)
+
+          AWS_REGION=$(jq -r \
+            --arg project "${{ inputs.project }}" \
+            --arg env "${{ inputs.environment }}" \
+            '.projects[$project][$env].aws_region' \
+            accounts.json)
+
+          ROLE_ARN=$(jq -r \
+            --arg project "${{ inputs.project }}" \
+            --arg env "${{ inputs.environment }}" \
+            '.projects[$project][$env].role_arn' \
+            accounts.json)
+
+          echo "tf_version=$TF_VERSION" >> "$GITHUB_OUTPUT"
+          echo "aws_region=$AWS_REGION" >> "$GITHUB_OUTPUT"
+          echo "role_arn=$ROLE_ARN" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: setup
+
+    uses: ./.github/workflows/reusable-terraform.yml
+
+    with:
+      project: ${{ inputs.project }}
+      environment: ${{ inputs.environment }}
+      aws_region: ${{ needs.setup.outputs.aws_region }}
+      role_arn: ${{ needs.setup.outputs.role_arn }}
+      tf_version: ${{ needs.setup.outputs.tf_version }}
