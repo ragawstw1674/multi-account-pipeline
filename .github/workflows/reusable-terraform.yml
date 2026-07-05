@@ -4,17 +4,22 @@ on:
   workflow_call:
     inputs:
       project:
-        description: Project name (e.g. tms, api)
         required: true
         type: string
 
       environment:
-        description: Environment name (e.g. dev, stage, prod)
         required: true
         type: string
 
-      terraform_command:
-        description: Terraform command to execute
+      aws_region:
+        required: true
+        type: string
+
+      role_arn:
+        required: true
+        type: string
+
+      tf_version:
         required: true
         type: string
 
@@ -23,8 +28,64 @@ permissions:
   contents: read
 
 jobs:
-  terraform:
-    name: Terraform
+  plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: stacks/${{ inputs.project }}/${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.tf_version }}
+
+      - uses: terraform-linters/setup-tflint@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ inputs.aws_region }}
+          role-to-assume: ${{ inputs.role_arn }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Validate
+        run: terraform validate
+
+      - name: TFLint Init
+        run: tflint --init
+
+      - name: TFLint
+        run: tflint --recursive
+
+      - name: Trivy Scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan
+
+      - name: Upload Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ inputs.project }}-${{ inputs.environment }}
+          path: stacks/${{ inputs.project }}/${{ inputs.environment }}/tfplan
+
+  apply:
+    name: Terraform Apply
+    needs: plan
     runs-on: ubuntu-latest
 
     environment: ${{ format('{0}-{1}', inputs.project, inputs.environment) }}
@@ -35,71 +96,26 @@ jobs:
         working-directory: stacks/${{ inputs.project }}/${{ inputs.environment }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ vars.TF_VERSION }}
-
-      - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@v4
+          terraform_version: ${{ inputs.tf_version }}
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-region: ${{ vars.AWS_REGION }}
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+          role-to-assume: ${{ inputs.role_arn }}
 
       - name: Terraform Init
         run: terraform init
 
-      - name: Terraform Format Check
-        if: inputs.terraform_command == 'validate'
-        run: terraform fmt -check -recursive
-
-      - name: Terraform Validate
-        if: inputs.terraform_command == 'validate'
-        run: terraform validate
-
-      - name: Initialize TFLint
-        if: inputs.terraform_command == 'validate'
-        run: tflint --init
-
-      - name: Run TFLint
-        if: inputs.terraform_command == 'validate'
-        run: tflint --recursive
-
-      - name: Run Trivy vulnerability scanner in IaC mode
-        if: inputs.terraform_command == 'validate'
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: 'config'
-          hide-progress: true
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Terraform Plan
-        if: inputs.terraform_command == 'plan'
-        run: terraform plan -out=tfplan
-
-      - name: Upload Plan
-        if: inputs.terraform_command == 'plan'
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-${{ inputs.project }}-${{ inputs.environment }}
-          path: stacks/${{ inputs.project }}/${{ inputs.environment }}/tfplan
-
       - name: Download Plan
-        if: inputs.terraform_command == 'apply'
         uses: actions/download-artifact@v4
         with:
           name: tfplan-${{ inputs.project }}-${{ inputs.environment }}
           path: stacks/${{ inputs.project }}/${{ inputs.environment }}
 
       - name: Terraform Apply
-        if: inputs.terraform_command == 'apply'
         run: terraform apply -auto-approve tfplan

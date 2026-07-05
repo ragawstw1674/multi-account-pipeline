@@ -1,0 +1,32 @@
+{
+  "projects": {
+    "tms": {
+      "dev": {
+        "aws_region": "ap-south-1",
+        "role_arn": "arn:aws:iam::078238935751:role/github-oidc-role"
+      },
+      "stage": {
+        "aws_region": "ap-south-1",
+        "role_arn": "arn:aws:iam::222222222222:role/github-oidc"
+      },
+      "prod": {
+        "aws_region": "ap-south-1",
+        "role_arn": "arn:aws:iam::333333333333:role/github-oidc"
+      }
+    },
+    "api": {
+      "dev": {
+        "aws_region": "ap-south-1",
+        "role_arn": "arn:aws:iam::444444444444:role/github-oidc"
+      },
+      "stage": {
+        "aws_region": "ap-south-1",
+        "role_arn": "arn:aws:iam::555555555555:role/github-oidc"
+      },
+      "prod": {
+        "aws_region": "ap-south-1",
+        "role_arn": "arn:aws:iam::666666666666:role/github-oidc"
+      }
+    }
+  }
+}
