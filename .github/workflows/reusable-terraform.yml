@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   lint: 
-    name: Terraform Lint
+    name: Lint
     runs-on: ubuntu-latest
 
     defaults:
@@ -56,7 +56,7 @@ jobs:
         run: tflint --recursive
 
   security: 
-    name: Terraform Security
+    name: Security
     runs-on: ubuntu-latest
     needs: lint
 
@@ -80,7 +80,7 @@ jobs:
           exit-code: "1"
 
   validate: 
-    name: Terraform Validate
+    name: Validate
     runs-on: ubuntu-latest
     needs: security
 
@@ -109,7 +109,7 @@ jobs:
         run: terraform validate
 
   plan:
-    name: Terraform Plan
+    name: Plan
     runs-on: ubuntu-latest
     needs: validate
 
@@ -144,7 +144,7 @@ jobs:
           path: stacks/${{ inputs.project }}/${{ inputs.environment }}/tfplan
 
   apply:
-    name: Terraform Apply
+    name: Apply
     needs: plan
     runs-on: ubuntu-latest
 
